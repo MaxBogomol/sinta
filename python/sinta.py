@@ -3,6 +3,8 @@ import os
 import math
 import io
 import sys
+import time
+import copy
 
 #######################################
 # CONSTANTS
@@ -170,7 +172,7 @@ KEYWORDS = [
   'end',
   'return',
   'continue',
-  'break',
+  'break'
 ]
 
 class Token:
@@ -1524,6 +1526,7 @@ Number.null = Number(0)
 Number.false = Number(0)
 Number.true = Number(1)
 Number.math_PI = Number(math.pi)
+Number.math_E = Number(math.e)
 
 class String(Value):
   def __init__(self, value):
@@ -1895,20 +1898,134 @@ class BuiltInFunction(BaseFunction):
     return RTResult().success(Number.null)
   execute_run.arg_names = ["fn"]
 
-BuiltInFunction.print       = BuiltInFunction("print")
-BuiltInFunction.print_ret   = BuiltInFunction("print_ret")
-BuiltInFunction.input       = BuiltInFunction("input")
-BuiltInFunction.input_int   = BuiltInFunction("input_int")
-BuiltInFunction.clear       = BuiltInFunction("clear")
-BuiltInFunction.is_number   = BuiltInFunction("is_number")
-BuiltInFunction.is_string   = BuiltInFunction("is_string")
-BuiltInFunction.is_list     = BuiltInFunction("is_list")
+  def execute_str(self, exec_ctx):
+    string=str(exec_ctx.symbol_table.get("value"))
+    return RTResult().success(String(string))
+  execute_str.arg_names = ["value"]
+  
+  def execute_int(self, exec_ctx):
+    number=str(exec_ctx.symbol_table.get("value"))
+    
+    try:
+      number=int(number)
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"'{number}' must be an integer! \n" + str(e),
+        exec_ctx
+      ))
+    return RTResult().success(Number(number))
+  execute_int.arg_names = ["value"]
+
+  def execute_float(self, exec_ctx):
+    number=str(exec_ctx.symbol_table.get("value"))
+    
+    try:
+      number=float(number)
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"'{number}' must be an float! \n" + str(e),
+        exec_ctx
+      ))
+    return RTResult().success(Number(number))
+  execute_float.arg_names = ["value"]
+
+  def execute_round(self, exec_ctx):
+    number = str(exec_ctx.symbol_table.get("value"))
+    
+    try:
+      number=round(float(number))
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"'{number}' must be an float! \n" + str(e),
+        exec_ctx
+      ))
+    return RTResult().success(Number(number))
+  execute_round.arg_names = ["value"]
+  
+  def execute_ceil(self, exec_ctx):
+    number = str(exec_ctx.symbol_table.get("value"))
+    try:
+      number=math.ceil(float(number))
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"'{number}' must be an float! \n" + str(e),
+        exec_ctx
+      ))
+    return RTResult().success(Number(number))
+  execute_ceil.arg_names = ["value"]
+  
+  def execute_floor(self, exec_ctx):
+    number = str(exec_ctx.symbol_table.get("value"))
+    try:
+      number=math.floor(float(number))
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"'{number}' must be an float! \n" + str(e),
+        exec_ctx
+      ))
+    return RTResult().success(Number(number))
+  execute_floor.arg_names = ["value"]
+
+  def execute_math_fabs(self, exec_ctx):
+    number = str(exec_ctx.symbol_table.get("value"))
+
+    try:
+      number=math.fabs(float(number))
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"'{number}' must be an number! \n" + str(e),
+        exec_ctx
+      ))
+  
+    return RTResult().success(Number(number))
+  execute_math_fabs.arg_names = ["value"]
+
+  def execute_math_sqrt(self, exec_ctx):
+    number = str(exec_ctx.symbol_table.get("value"))
+
+    try:
+      number=math.sqrt(float(number))
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"'{number}' must be an number! \n" + str(e),
+        exec_ctx
+      ))
+  
+    return RTResult().success(Number(number))
+  execute_math_sqrt.arg_names = ["value"]
+
+  def execute_time_time(self, exec_ctx):
+    return RTResult().success(Number(time.time()))
+  execute_time_time.arg_names = []
+
+BuiltInFunction.print = BuiltInFunction("print")
+BuiltInFunction.input = BuiltInFunction("input")
+BuiltInFunction.clear = BuiltInFunction("clear")
+BuiltInFunction.is_number = BuiltInFunction("is_number")
+BuiltInFunction.is_string = BuiltInFunction("is_string")
+BuiltInFunction.is_list = BuiltInFunction("is_list")
 BuiltInFunction.is_function = BuiltInFunction("is_function")
-BuiltInFunction.append      = BuiltInFunction("append")
-BuiltInFunction.pop         = BuiltInFunction("pop")
-BuiltInFunction.extend      = BuiltInFunction("extend")
-BuiltInFunction.len					= BuiltInFunction("len")
-BuiltInFunction.run					= BuiltInFunction("run")
+BuiltInFunction.append = BuiltInFunction("append")
+BuiltInFunction.pop = BuiltInFunction("pop")
+BuiltInFunction.extend = BuiltInFunction("extend")
+BuiltInFunction.len = BuiltInFunction("len")
+BuiltInFunction.run = BuiltInFunction("run")
+BuiltInFunction.str = BuiltInFunction("str")
+BuiltInFunction.int = BuiltInFunction("int")
+BuiltInFunction.float = BuiltInFunction("float")
+BuiltInFunction.round = BuiltInFunction("round")
+BuiltInFunction.ceil = BuiltInFunction("ceil")
+BuiltInFunction.floor = BuiltInFunction("floor")
+BuiltInFunction.math_fabs = BuiltInFunction("math_fabs")
+BuiltInFunction.math_sqrt = BuiltInFunction("math_sqrt")
+BuiltInFunction.time_time = BuiltInFunction("time_time")
 
 #######################################
 # CONTEXT
@@ -2201,25 +2318,36 @@ class Interpreter:
 #######################################
 
 global_symbol_table = SymbolTable()
-global_symbol_table.set("null", Number.null)
-global_symbol_table.set("false", Number.false)
-global_symbol_table.set("true", Number.true)
-global_symbol_table.set("math_pi", Number.math_PI)
-global_symbol_table.set("print", BuiltInFunction.print)
-global_symbol_table.set("PRINT_RET", BuiltInFunction.print_ret)
-global_symbol_table.set("input", BuiltInFunction.input)
-global_symbol_table.set("INPUT_INT", BuiltInFunction.input_int)
-global_symbol_table.set("clear", BuiltInFunction.clear)
-global_symbol_table.set("cls", BuiltInFunction.clear)
-global_symbol_table.set("is_num", BuiltInFunction.is_number)
-global_symbol_table.set("is_str", BuiltInFunction.is_string)
-global_symbol_table.set("is_list", BuiltInFunction.is_list)
-global_symbol_table.set("is_fun", BuiltInFunction.is_function)
-global_symbol_table.set("append", BuiltInFunction.append)
-global_symbol_table.set("pop", BuiltInFunction.pop)
-global_symbol_table.set("extend", BuiltInFunction.extend)
-global_symbol_table.set("len", BuiltInFunction.len)
-global_symbol_table.set("run", BuiltInFunction.run)
+def symbols():
+  global global_symbol_table
+  global_symbol_table = SymbolTable()
+  global_symbol_table.set("null", Number.null)
+  global_symbol_table.set("false", Number.false)
+  global_symbol_table.set("true", Number.true)
+  global_symbol_table.set("math_pi", Number.math_PI)
+  global_symbol_table.set("math_e", Number.math_E)
+  global_symbol_table.set("math_fabs", BuiltInFunction.math_fabs)
+  global_symbol_table.set("math_sqrt", BuiltInFunction.math_sqrt)
+  global_symbol_table.set("round", BuiltInFunction.round)
+  global_symbol_table.set("ceil", BuiltInFunction.ceil)
+  global_symbol_table.set("floor", BuiltInFunction.floor)
+  global_symbol_table.set("print", BuiltInFunction.print)
+  global_symbol_table.set("input", BuiltInFunction.input)
+  global_symbol_table.set("clear", BuiltInFunction.clear)
+  global_symbol_table.set("cls", BuiltInFunction.clear)
+  global_symbol_table.set("is_num", BuiltInFunction.is_number)
+  global_symbol_table.set("is_str", BuiltInFunction.is_string)
+  global_symbol_table.set("is_list", BuiltInFunction.is_list)
+  global_symbol_table.set("is_fun", BuiltInFunction.is_function)
+  global_symbol_table.set("append", BuiltInFunction.append)
+  global_symbol_table.set("pop", BuiltInFunction.pop)
+  global_symbol_table.set("extend", BuiltInFunction.extend)
+  global_symbol_table.set("len", BuiltInFunction.len)
+  global_symbol_table.set("run", BuiltInFunction.run)
+  global_symbol_table.set("str", BuiltInFunction.str)
+  global_symbol_table.set("int", BuiltInFunction.int)
+  global_symbol_table.set("float", BuiltInFunction.float)
+  global_symbol_table.set("time_time", BuiltInFunction.time_time)
 
 def run(fn, text):
   global is_run
@@ -2242,6 +2370,8 @@ def run(fn, text):
 
   return result.value, result.error
 
-def run_kill():
-  global is_run
-  is_run=False
+def get_vars():
+  return global_symbol_table.symbols
+  
+def get_version():
+  return "1.0.0"

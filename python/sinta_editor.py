@@ -1,5 +1,5 @@
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QScrollArea, QComboBox, QLineEdit, QTextEdit, QFileDialog
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QScrollArea, QComboBox, QLineEdit, QTextEdit, QFileDialog, QListWidget
 from PyQt5.QtCore import QObject
 from PyQt5.QtCore import pyqtSignal as Signal
 import time
@@ -8,19 +8,23 @@ import os
 import io
 import re
 import sinta
-import subprocess
+import traceback
 
 class MyThread(QThread):
     my_signal = pyqtSignal(str)
     
-    def __init__(self,worker):
+    def __init__(self,worker,types="loop"):
         super(MyThread, self).__init__()
         self.count = 0
         self.worker=worker
+        self.types=types
  
     def run(self):
         self.my_signal.emit(str(self.count))
-        self.worker.loop()
+        if self.types=="loop":
+            self.worker.loop()
+        if self.types=="debug":
+            self.worker.debug_loop()
 
 class OutputLogger(QObject):
     emit_write = Signal(str, int)
@@ -67,7 +71,7 @@ class SintaEditor(QWidget):
         self.thread={}
 
         self.file_settings=["File","New File","Open","Save","Save As"]
-        self.file=""
+        self.file_path=""
         sinta.editor.editor=True
         
         self.button_file = QComboBox()
@@ -77,6 +81,8 @@ class SintaEditor(QWidget):
         self.button_kill = QPushButton("Kill")
         self.button_debug_console = QPushButton("Debug")
         self.button_clear_console = QPushButton("Clear")
+        self.debug_list = QListWidget()
+        self.debug_list.hide()
         self.code_text = QTextEdit()
         self.code_text.setTabStopDistance(4*4)
         self.console_text = QTextEdit()
@@ -96,33 +102,40 @@ class SintaEditor(QWidget):
         self.h_line2.addWidget(self.input_text,95)
         self.h_line2.addWidget(self.input_button,5)
 
+        self.h_line3=QHBoxLayout()
+        self.h_line3.addWidget(self.code_text,80)
+        self.h_line3.addWidget(self.debug_list,20)
+
         self.v_line1=QVBoxLayout()
         self.v_line1.addLayout(self.h_line1,5)
-        self.v_line1.addWidget(self.code_text,70)
+        self.v_line1.addLayout(self.h_line3,70)
         self.v_line1.addWidget(self.console_text,20)
         self.v_line1.addLayout(self.h_line2,5)
         self.scroll = QScrollArea(alignment=Qt.AlignTop)
         self.scroll.setLayout(self.v_line1)
         self.scroll.setWidgetResizable(True)
 
-        self.h_line3=QHBoxLayout()
-        self.h_line3.addWidget(self.scroll)
+        self.h_line4=QHBoxLayout()
+        self.h_line4.addWidget(self.scroll)
 
         self.button_run.clicked.connect(self.run)
         self.button_kill.clicked.connect(self.run_kill)
         self.button_clear_console.clicked.connect(self.clear_console)
+        self.button_debug_console.clicked.connect(self.debug_console)
         self.input_button.clicked.connect(self.input_enter)
         self.button_file.currentIndexChanged.connect(self.files_settings)
 
         OUTPUT_LOGGER_STDOUT.emit_write.connect(self.append_log)
         OUTPUT_LOGGER_STDERR.emit_write.connect(self.append_log)
         
-        self.setLayout(self.h_line3)
+        self.setLayout(self.h_line4)
         self.show()
         self.my_thread = MyThread(self)
+        self.debug_thread = MyThread(self,types="debug")
         sinta.editor.thread=self.my_thread
         
         self.run=False
+        self.debug=False
 
     def append_log(self, text, severity):
         text = repr(text)
@@ -135,7 +148,7 @@ class SintaEditor(QWidget):
 
     def files_settings(self):
         if self.button_file.currentText()=="New File":
-            self.file=""
+            self.file_path=""
             self.code_text.clear()
             self.setWindowTitle("Sinta Editor - untitled")
         
@@ -149,14 +162,16 @@ class SintaEditor(QWidget):
                 self.setWindowTitle("Sinta - "+file[0])
                 
         if self.button_file.currentText()=="Save":
-            if self.file!="":
-                file = open(self.file,'w+')
+            if self.file_path!="":
+                file = open(self.file_path,'w+')
                 text = self.code_text.toPlainText()
                 file.write(text)
                 file.close()
             else:
                 file = QFileDialog.getSaveFileName(self, "Save File", "", "Sinta Code Script (*.scs);;Text Files (*.txt)")
                 if file[0]!="":
+                    self.file_path=file[0]
+                    self.setWindowTitle("Sinta - "+file[0])
                     file = open(file[0],'w+')
                     text = self.code_text.toPlainText()
                     file.write(text)
@@ -165,6 +180,8 @@ class SintaEditor(QWidget):
         if self.button_file.currentText()=="Save As":
             file = QFileDialog.getSaveFileName(self, "Save File", "", "Sinta Code Script (*.scs);;Text Files (*.txt)")
             if file[0]!="":
+                self.file_path=file[0]
+                self.setWindowTitle("Sinta - "+file[0])
                 file = open(file[0],'w+')
                 text = self.code_text.toPlainText()
                 file.write(text)
@@ -181,6 +198,17 @@ class SintaEditor(QWidget):
 
     def clear_console(self):
         self.console_text.clear()
+
+    def debug_console(self):
+        if self.debug:
+            self.debug_thread.terminate()
+            self.debug_list.hide()
+            self.debug=False
+        else:
+            self.debug_update()
+            self.debug_thread.start()
+            self.debug_list.show()
+            self.debug=True
 
     def input_enter(self):
         if sinta.editor.inputs==1:
@@ -202,7 +230,11 @@ class SintaEditor(QWidget):
             #for code_line in code.split('\n'):
             #text = input('basic > ')
             if code.strip() == "": pass
-            result, error = sinta.run('<stdin>', code)
+            try:
+                result, error = sinta.run('<stdin>', code)
+            except Exception as err:
+                traceback.print_exc()
+            self.my_thread.usleep(10000)
 
             if error:
                 self.print_console(error.as_string(),error=True)
@@ -213,6 +245,9 @@ class SintaEditor(QWidget):
                     self.print_console("Result "+repr(result),result=True)
             
             self.run=False
+            if self.debug:
+                self.debug_update()
+            sinta.symbols()
             #console::str,<Hello World!>
 
     def run(self):
@@ -222,12 +257,24 @@ class SintaEditor(QWidget):
     def print_console(self,arg,error=False,result=False):
         arg=str(arg)
         if error:
-            arg = "<span style=\" color:#ff0000;\" >"+arg+"</span>"
+            arg = '<span style=\" color:#ff0000;\" >'+arg+"</span>"
         if result:
-            arg = "<span style=\" color:#0000FF;\" >"+arg+"</span>"
+            arg = '<span style=\" color:#0000FF;\" >'+arg+"</span>"
         self.console_text.append(arg)
         self.console_text.ensureCursorVisible()
         self.console_text.update()
+
+    def debug_loop(self):
+        while True:
+            if self.run:
+                    self.debug_update()
+            self.debug_thread.usleep(100000)
+
+    def debug_update(self):
+        var=sinta.get_vars()
+        self.debug_list.clear()
+        for item in var:
+            self.debug_list.addItem(item+" = "+str(var[item]))
             
 if __name__ == '__main__':
 
@@ -235,3 +282,5 @@ if __name__ == '__main__':
 
     w = SintaEditor()
     sys.exit(app.exec_())
+
+#pyinstaller --onefile --noconsole sinta_editor.py
