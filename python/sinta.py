@@ -2348,6 +2348,7 @@ def symbols():
   global_symbol_table.set("int", BuiltInFunction.int)
   global_symbol_table.set("float", BuiltInFunction.float)
   global_symbol_table.set("time_time", BuiltInFunction.time_time)
+symbols()
 
 def run(fn, text):
   global is_run
